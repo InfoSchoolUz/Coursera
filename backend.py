@@ -9,36 +9,42 @@ class Req(BaseModel):
 
 @app.post("/check")
 def check(data: Req):
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
-        page = browser.new_page()
-        page.goto("https://aileaders.uz/auth/login/check")
+    try:
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            page = browser.new_page()
 
-        # PINFL input (2-chi input)
-        inputs = page.locator("input")
-        inputs.nth(1).fill(data.pinfl)
+            page.goto("https://aileaders.uz/auth/login/check")
 
-        # Tekshirish tugmasi
-        page.locator("button").filter(has_text="Tekshirish").click()
+            inputs = page.locator("input")
+            inputs.nth(1).fill(data.pinfl)
 
-        # natija chiqishini kutish
-        page.wait_for_timeout(2000)
+            page.locator("button").filter(has_text="Tekshirish").click()
 
-        body = page.inner_text("body")
+            page.wait_for_timeout(2000)
 
-        email = ""
-        courses = "0"
+            body = page.inner_text("body")
 
-        if "Email:" in body:
-            email = body.split("Email:")[1].split("\n")[0].strip()
+            email = ""
+            courses = "0"
 
-        if "Topilgan kurslar:" in body:
-            courses = body.split("Topilgan kurslar:")[1].split("\n")[0].strip()
+            if "Email:" in body:
+                email = body.split("Email:")[1].split("\n")[0].strip()
 
-        browser.close()
+            if "Topilgan kurslar:" in body:
+                courses = body.split("Topilgan kurslar:")[1].split("\n")[0].strip()
 
+            browser.close()
+
+            return {
+                "pinfl": data.pinfl,
+                "email": email,
+                "courses": courses
+            }
+
+    except Exception as e:
         return {
             "pinfl": data.pinfl,
-            "email": email,
-            "courses": courses
+            "email": "Xatolik",
+            "courses": "Xatolik"
         }
