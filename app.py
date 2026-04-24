@@ -3,26 +3,21 @@ import pandas as pd
 import time
 from playwright.sync_api import sync_playwright
 
-st.set_page_config(page_title="PINFL Checker", layout="wide")
+st.title("📊 AI Leaders PINFL Checker")
 
-st.title("📊 Sertifikatlarni tekshirish (AI Leaders)")
-
-uploaded_file = st.file_uploader("📂 Excel fayl yuklang", type=["xlsx", "csv"])
+uploaded_file = st.file_uploader("📂 Excel yuklang", type=["xlsx"])
 
 if uploaded_file:
     df = pd.read_excel(uploaded_file)
 
-    st.write("📋 Yuklangan ma'lumot:")
-    st.dataframe(df.head())
-
     if "PINFL" not in df.columns:
-        st.error("❌ Excelda 'PINFL' ustuni bo‘lishi kerak!")
+        st.error("❌ 'PINFL' ustuni topilmadi!")
     else:
         if st.button("🚀 Tekshirishni boshlash"):
-            results = []
 
+            results = []
             progress = st.progress(0)
-            status_text = st.empty()
+            status = st.empty()
 
             with sync_playwright() as p:
                 browser = p.chromium.launch(headless=True)
@@ -30,37 +25,56 @@ if uploaded_file:
 
                 page.goto("https://aileaders.uz/auth/login/check")
 
-                total = len(df)
-
                 for i, pinfl in enumerate(df["PINFL"]):
                     pinfl = str(pinfl)
 
-                    status_text.text(f"🔍 Tekshirilmoqda: {pinfl}")
+                    status.text(f"🔍 Tekshirilmoqda: {pinfl}")
 
                     try:
-                        # input tozalash
-                        page.fill('input[placeholder="123123123"]', pinfl)
+                        # INPUTLAR
+                        inputs = page.locator("input")
+                        inputs.nth(1).fill("")  # tozalash
+                        inputs.nth(1).fill(pinfl)
 
-                        # tugma bosish
-                        page.click("text=Tekshirish")
+                        # BUTTON
+                        page.locator("button").filter(has_text="Tekshirish").click()
 
-                        time.sleep(2)
+                        # NATIJA CHIQISHINI KUTISH
+                        page.wait_for_timeout(2000)
 
-                        # NATIJA BLOKNI OLISH
-                        if page.locator("text=Topilgan kurslar").count() > 0:
-                            result_text = page.locator("text=Topilgan kurslar").first.inner_text()
-                        else:
-                            result_text = "Topilmadi"
+                        # 🔥 ASOSIY QISM (YASHIL BLOKNI OLISH)
+                        body = page.inner_text("body")
+
+                        # DEFAULT
+                        email = ""
+                        courses = "0"
+
+                        if "Email:" in body:
+                            try:
+                                email = body.split("Email:")[1].split("\n")[0].strip()
+                            except:
+                                email = "Topilmadi"
+
+                        if "Topilgan kurslar:" in body:
+                            try:
+                                courses = body.split("Topilgan kurslar:")[1].split("\n")[0].strip()
+                            except:
+                                courses = "0"
+
+                        results.append({
+                            "PINFL": pinfl,
+                            "Email": email,
+                            "Kurslar_soni": courses
+                        })
 
                     except Exception as e:
-                        result_text = "Xatolik"
+                        results.append({
+                            "PINFL": pinfl,
+                            "Email": "Xatolik",
+                            "Kurslar_soni": "Xatolik"
+                        })
 
-                    results.append({
-                        "PINFL": pinfl,
-                        "Natija": result_text
-                    })
-
-                    progress.progress((i + 1) / total)
+                    progress.progress((i + 1) / len(df))
                     time.sleep(2)
 
                 browser.close()
@@ -70,10 +84,8 @@ if uploaded_file:
             st.success("✅ Tugadi!")
             st.dataframe(result_df)
 
-            # download
             st.download_button(
-                label="📥 Natijani yuklab olish",
-                data=result_df.to_csv(index=False).encode('utf-8'),
-                file_name="natija.csv",
-                mime="text/csv"
+                "📥 CSV yuklab olish",
+                result_df.to_csv(index=False).encode("utf-8"),
+                "natija.csv"
             )
