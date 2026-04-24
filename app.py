@@ -1,65 +1,80 @@
 import streamlit as st
 import pandas as pd
-import requests
 from io import BytesIO
 
 st.title("📊 AI Leaders PINFL Checker (Online)")
 
 uploaded_file = st.file_uploader("📂 Excel yuklang", type=["xlsx"])
 
+# 1️⃣ Fayl yuklandi → jim turadi
 if uploaded_file:
     df = pd.read_excel(uploaded_file)
     df.columns = df.columns.map(str).str.strip()
 
     st.success("✅ Fayl yuklandi")
-    st.dataframe(df.head())
 
-    selected_col = st.selectbox("📌 PINFL ustunini tanlang", df.columns)
+    # 2️⃣ Sheet/ustun tanlash → jim turadi
+    col1, col2 = st.columns(2)
 
+    with col1:
+        region_col = st.selectbox("📍 Viloyat / Tuman ustuni", df.columns)
+
+    with col2:
+        org_col = st.selectbox("🏫 Maktab (tashkilot) ustuni", df.columns)
+
+    col3, col4 = st.columns(2)
+
+    with col3:
+        total_col = st.selectbox("👥 Jami son ustuni", df.columns)
+
+    with col4:
+        success_col = st.selectbox("🎓 Sertifikat olganlar ustuni", df.columns)
+
+    # 3️⃣ Tugma chiqadi
     if st.button("🚀 Tekshirishni boshlash"):
 
-        results = []
         progress = st.progress(0)
-        status_text = st.empty()
+        status = st.empty()
 
-        total = len(df)
+        total_rows = len(df)
 
-        for i, (_, row) in enumerate(df.iterrows()):
-            pinfl = str(row[selected_col]).strip()
+        # progress (faqat animatsiya uchun)
+        for i in range(total_rows):
+            progress.progress((i + 1) / total_rows)
+            status.text(f"🔄 Hisoblanmoqda: {i+1}/{total_rows}")
 
-            try:
-                res = requests.post(
-                    "http://127.0.0.1:8000/check",
-                    json={"pinfl": pinfl}
-                ).json()
+        # 4️⃣ HISOBOT (sen xohlagan format)
+        result = (
+            df.groupby([region_col, org_col], as_index=False)
+            .agg({
+                total_col: "sum",
+                success_col: "sum"
+            })
+        )
 
-                results.append({
-                    "PINFL": pinfl,
-                    "Email": res["email"],
-                    "Kurslar": res["courses"]
-                })
+        # foiz hisoblash
+        result["%"] = (result[success_col] / result[total_col] * 100).round(2)
 
-            except:
-                results.append({
-                    "PINFL": pinfl,
-                    "Email": "Xatolik",
-                    "Kurslar": "Xatolik"
-                })
+        # ustun nomlarini chiroyli qilish
+        result.columns = [
+            "Hudud",
+            "Maktab",
+            "Jami",
+            "Sertifikat olganlar",
+            "%"
+        ]
 
-            progress.progress((i + 1) / total)
-            status_text.text(f"🔄 {i+1}/{total}")
+        st.success("✅ Hisobot tayyor!")
 
-        result_df = pd.DataFrame(results)
+        st.dataframe(result)
 
-        st.success("✅ Tugadi!")
-        st.dataframe(result_df)
-
+        # Excel export
         output = BytesIO()
-        result_df.to_excel(output, index=False)
+        result.to_excel(output, index=False)
         output.seek(0)
 
         st.download_button(
-            "📥 Excel yuklab olish",
-            output,
-            "natija.xlsx"
+            "📥 Hisobotni yuklab olish",
+            data=output,
+            file_name="hisobot.xlsx"
         )
